@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PR@文字チェッカー</title>
-    <link rel="icon" href="favicon.png" type="type=image/png" />
     <style>
         :root {
             --primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -523,6 +522,9 @@
                     <button class="btn btn-clear" onclick="app.clearResults()">
                         🧹 結果クリア
                     </button>
+                    <button class="btn btn-clear" onclick="app.reflectResult()">
+                        ⬅️ 右の結果を左に反映
+                    </button>
                 </div>
             </div>
 
@@ -572,6 +574,7 @@
 サイト: https://example.com/
 「重要事項」【必読】ａｂｃ１２３
 時間 12:00〜16:00
+URD:OM
 
 数千文字の長文でも瞬時に処理します！"
                         oninput="app.updateStats()"
@@ -626,7 +629,7 @@
                     </div>
                     <div class="legend-item">
                         <div class="legend-title">🌐 URL保護</div>
-                        <div class="legend-desc">https:、http:のURLコロンは変換しない</div>
+                        <div class="legend-desc">https:、http:、URD:OMパターンのコロンは変換しない</div>
                     </div>
                     <div class="legend-item">
                         <div class="legend-title">✨ ハイライト表示</div>
@@ -712,7 +715,7 @@
                         zenkaku++;
                     }
                     
-                    if ((char === ':' || char === '：') && !this.isTimeFormat(text, i) && !this.isHttpUrl(text, i)) {
+                    if ((char === ':' || char === '：') && !this.isTimeFormat(text, i) && !this.isUrlPattern(text, i)) {
                         colon++;
                     }
                     
@@ -738,6 +741,46 @@
                 var code = char.charCodeAt(0);
                 return (code >= 0xFF01 && code <= 0xFF5E) || 
                        (code >= 0x3000 && code <= 0x303F && exceptions.indexOf(char) === -1);
+            },
+
+            isTimeFormat: function(text, index) {
+                var leftHasNumber = false;
+                var i = index - 1;
+                while (i >= 0 && /[0-9０-９]/.test(text.charAt(i))) {
+                    leftHasNumber = true;
+                    i--;
+                }
+                
+                var rightHasNumber = false;
+                if (index + 2 < text.length) {
+                    var rightPart = text.substring(index + 1, index + 3);
+                    if (/^[0-9０-９]{2}$/.test(rightPart)) {
+                        rightHasNumber = true;
+                    }
+                }
+                
+                return leftHasNumber && rightHasNumber;
+            },
+
+            isUrlPattern: function(text, index) {
+                // HTTP/HTTPS チェック
+                if (index >= 4) {
+                    var before5 = text.substring(index - 4, index + 1);
+                    if (before5 === 'http:' || before5 === 'HTTP:') return true;
+                }
+                if (index >= 5) {
+                    var before6 = text.substring(index - 5, index + 1);
+                    if (before6 === 'https:' || before6 === 'HTTPS:') return true;
+                }
+                
+                // URD:OM パターンチェック
+                // URD:OM は5文字、コロンは3番目（0ベース）
+                if (index >= 3 && index + 2 < text.length) {
+                    var pattern = text.substring(index - 3, index + 3);
+                    if (pattern === 'URD:OM' || pattern === 'urd:om') return true;
+                }
+                
+                return false;
             },
 
             showLoading: function() {
@@ -849,37 +892,6 @@
                 }, 300);
             },
 
-            isTimeFormat: function(text, index) {
-                var leftHasNumber = false;
-                var i = index - 1;
-                while (i >= 0 && /[0-9０-９]/.test(text.charAt(i))) {
-                    leftHasNumber = true;
-                    i--;
-                }
-                
-                var rightHasNumber = false;
-                if (index + 2 < text.length) {
-                    var rightPart = text.substring(index + 1, index + 3);
-                    if (/^[0-9０-９]{2}$/.test(rightPart)) {
-                        rightHasNumber = true;
-                    }
-                }
-                
-                return leftHasNumber && rightHasNumber;
-            },
-
-            isHttpUrl: function(text, index) {
-                if (index >= 4) {
-                    var before5 = text.substring(index - 4, index + 1);
-                    if (before5 === 'http:' || before5 === 'HTTP:') return true;
-                }
-                if (index >= 5) {
-                    var before6 = text.substring(index - 5, index + 1);
-                    if (before6 === 'https:' || before6 === 'HTTPS:') return true;
-                }
-                return false;
-            },
-
             highlightColons: function() {
                 var text = document.getElementById('inputText').value;
                 if (!text.trim()) {
@@ -899,7 +911,7 @@
                         var char = text.charAt(i);
                         
                         if (char === ':' || char === '：') {
-                            if (self.isTimeFormat(text, i) || self.isHttpUrl(text, i)) {
+                            if (self.isTimeFormat(text, i) || self.isUrlPattern(text, i)) {
                                 result += self.escapeHtml(char);
                                 skipCount++;
                             } else {
@@ -951,7 +963,7 @@
                         var char = text.charAt(i);
                         
                         if (char === ':' || char === '：') {
-                            if (self.isTimeFormat(text, i) || self.isHttpUrl(text, i)) {
+                            if (self.isTimeFormat(text, i) || self.isUrlPattern(text, i)) {
                                 result += char;
                                 skipCount++;
                             } else {
@@ -1098,6 +1110,31 @@
                 
                 if (!this.isInputMode) {
                     this.enableEdit();
+                }
+            },
+
+            reflectResult: function() {
+                var rightText = document.getElementById('outputArea').value;
+                if (!rightText.trim()) {
+                    alert('右側の結果エリアに反映するテキストがありません');
+                    return;
+                }
+
+                // 確認ダイアログ
+                if (confirm('右側の結果を左側の入力エリアに反映しますか？\n（現在の入力内容は上書きされます）')) {
+                    document.getElementById('inputText').value = rightText;
+                    this.updateStats();
+                    
+                    // 編集モードに戻す
+                    if (!this.isInputMode) {
+                        this.enableEdit();
+                    }
+                    
+                    // 成功メッセージ
+                    this.showMessage('leftMessage', '✅ 右側の結果を左側に反映しました');
+                    
+                    // フォーカスを左側に移動
+                    document.getElementById('inputText').focus();
                 }
             }
         };
