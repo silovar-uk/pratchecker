@@ -15,6 +15,7 @@
             --colon: linear-gradient(45deg, #e67e22, #d35400);
             --weekday: linear-gradient(45deg, #8e44ad, #9b59b6);
             --hankana: linear-gradient(45deg, #16a085, #27ae60);
+            --kutouten: linear-gradient(45deg, #ff8177 0%, #ff867a 0%, #ff8c7f 21%, #f99185 52%, #cf556c 78%, #b12a5b 100%);
             --success: linear-gradient(45deg, #2ecc71, #27ae60);
             --danger: linear-gradient(45deg, #e74c3c, #c0392b);
             --clear: linear-gradient(45deg, #a8edea, #fed6e3);
@@ -132,6 +133,7 @@
         .btn-colon-convert { background: var(--success); color: white; }
         .btn-weekday-highlight { background: var(--weekday); color: white; }
         .btn-hankana-highlight { background: var(--hankana); color: white; }
+        .btn-kutouten-highlight { background: var(--kutouten); color: white; }
         .btn-clear { background: var(--clear); color: #333; }
 
         .stats {
@@ -337,6 +339,15 @@
             cursor: help;
             transition: transform 0.2s ease;
             font-weight: bold;
+        }
+
+        .highlight-kutouten-ng {
+            background: rgba(231, 76, 60, 0.2);
+            border-left: 3px solid #c0392b;
+            padding: 2px 5px;
+            display: block;
+            margin: -3px -15px -3px -18px; /* Counteract padding to align text */
+            padding-left: 15px;
         }
 
         .highlight-zenkaku:hover,
@@ -623,15 +634,20 @@
                     <button class="btn btn-weekday-highlight" onclick="app.highlightWeekdays()">
                         📅 曜日ハイライト
                     </button>
-                    <button class="btn btn-hankana-highlight" onclick="app.highlightHankana()">
-                        🔤 半角カナハイライト
+                     <button class="btn btn-kutouten-highlight" onclick="app.highlightKutouten()">
+                        🖋️ 句点チェック
                     </button>
                 </div>
 
                 <div class="button-group">
+                     <button class="btn btn-hankana-highlight" onclick="app.highlightHankana()">
+                        🔤 半角カナハイライト
+                    </button>
                     <button class="btn btn-clear" onclick="app.clearResults()">
                         🧹 結果クリア
                     </button>
+                </div>
+                 <div class="button-group">
                     <button class="btn btn-clear" onclick="app.reflectResult()">
                         ⬅️ 右の結果を左に反映
                     </button>
@@ -659,6 +675,10 @@
                     <span class="stat-number" id="hankanaCount">0</span>
                     <span class="stat-label">🔤 半角カナ</span>
                 </div>
+                 <div class="stat-card">
+                    <span class="stat-number" id="kutoutenNashiCount">0</span>
+                    <span class="stat-label">🖋️ 句点なし文</span>
+                </div>
             </div>
 
             <div class="editor-grid">
@@ -685,6 +705,11 @@
 「重要事項」【必読】ａｂｃ１２３
 時間 12:00〜16:00
 URD:OM
+この文には句点がありません
+この文には句点があります。
+この文は感嘆符で終わります！
+This ends with a question mark?
+（この文は括弧で終わります）
 
 数千文字の長文でも瞬時に処理します！"
                         oninput="app.updateStats()"
@@ -737,6 +762,10 @@ URD:OM
                         <div class="legend-desc">ｱｲｳｴｵ、ｶﾞｷﾞなどの半角カタカナを検出</div>
                     </div>
                     <div class="legend-item">
+                        <div class="legend-title">🖋️ 句点チェック</div>
+                        <div class="legend-desc">文末に句点（。！？）がない文をハイライトします。（URLやコロンで終わる行などは除外）</div>
+                    </div>
+                    <div class="legend-item">
                         <div class="legend-title">🛡️ 日本語保護</div>
                         <div class="legend-desc">「」【】『』、。〇＆～〜々などの日本語文字は変換対象外</div>
                     </div>
@@ -747,10 +776,6 @@ URD:OM
                     <div class="legend-item">
                         <div class="legend-title">🌐 URL保護</div>
                         <div class="legend-desc">https:、http:、URD:OMパターンのコロンは変換しない</div>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-title">✨ ハイライト表示</div>
-                        <div class="legend-desc">検出された文字は色付きハイライトで視覚的に表示</div>
                     </div>
                 </div>
             </div>
@@ -816,6 +841,7 @@ URD:OM
                 document.getElementById('colonCount').textContent = stats.colon;
                 document.getElementById('weekdayCount').textContent = stats.weekday;
                 document.getElementById('hankanaCount').textContent = stats.hankana;
+                document.getElementById('kutoutenNashiCount').textContent = stats.kutoutenNashi;
             },
 
             analyzeText: function(text) {
@@ -824,6 +850,7 @@ URD:OM
                 var colon = 0;
                 var weekday = 0;
                 var hankana = 0;
+                var kutoutenNashi = 0;
 
                 for (var i = 0; i < text.length; i++) {
                     var char = text.charAt(i);
@@ -846,7 +873,28 @@ URD:OM
                 var weekdayMatches = text.match(weekdayPattern);
                 weekday = weekdayMatches ? weekdayMatches.length : 0;
 
-                return { total: total, zenkaku: zenkaku, colon: colon, weekday: weekday, hankana: hankana };
+                var lines = text.split('\n');
+                var validEndings = ['。', '！', '？', '!', '?', ':', '：', '〜'];
+                for (var j = 0; j < lines.length; j++) {
+                    var trimmedLine = lines[j].trim();
+                    if (trimmedLine.length > 0) {
+                        var hasValidEnding = false;
+                        for (var k = 0; k < validEndings.length; k++) {
+                            if (trimmedLine.endsWith(validEndings[k])) {
+                                hasValidEnding = true;
+                                break;
+                            }
+                        }
+                        if (trimmedLine.startsWith('http:') || trimmedLine.startsWith('https:') || /URD:OM/i.test(trimmedLine)) {
+                            hasValidEnding = true;
+                        }
+                        if (!hasValidEnding) {
+                            kutoutenNashi++;
+                        }
+                    }
+                }
+
+                return { total: total, zenkaku: zenkaku, colon: colon, weekday: weekday, hankana: hankana, kutoutenNashi: kutoutenNashi };
             },
 
             isTargetZenkaku: function(char) {
@@ -892,10 +940,9 @@ URD:OM
                 }
                 
                 // URD:OM パターンチェック
-                // URD:OM は5文字、コロンは3番目（0ベース）
                 if (index >= 3 && index + 2 < text.length) {
                     var pattern = text.substring(index - 3, index + 3);
-                    if (pattern === 'URD:OM' || pattern === 'urd:om') return true;
+                    if (pattern.toUpperCase() === 'URD:OM') return true;
                 }
                 
                 return false;
@@ -928,7 +975,7 @@ URD:OM
             highlightZenkaku: function() {
                 var text = document.getElementById('inputText').value;
                 if (!text.trim()) {
-                    alert('テキストを入力してください');
+                    this.showMessage('leftMessage', '⚠️ テキストを入力してください');
                     return;
                 }
 
@@ -968,7 +1015,7 @@ URD:OM
             convertZenkaku: function() {
                 var text = document.getElementById('inputText').value;
                 if (!text.trim()) {
-                    alert('テキストを入力してください');
+                    this.showMessage('rightMessage', '⚠️ テキストを入力してください');
                     return;
                 }
 
@@ -1013,7 +1060,7 @@ URD:OM
             highlightColons: function() {
                 var text = document.getElementById('inputText').value;
                 if (!text.trim()) {
-                    alert('テキストを入力してください');
+                    this.showMessage('leftMessage', '⚠️ テキストを入力してください');
                     return;
                 }
 
@@ -1065,7 +1112,7 @@ URD:OM
             convertColons: function() {
                 var text = document.getElementById('inputText').value;
                 if (!text.trim()) {
-                    alert('テキストを入力してください');
+                    this.showMessage('rightMessage', '⚠️ テキストを入力してください');
                     return;
                 }
 
@@ -1108,7 +1155,7 @@ URD:OM
             highlightWeekdays: function() {
                 var text = document.getElementById('inputText').value;
                 if (!text.trim()) {
-                    alert('テキストを入力してください');
+                    this.showMessage('leftMessage', '⚠️ テキストを入力してください');
                     return;
                 }
 
@@ -1174,7 +1221,7 @@ URD:OM
             highlightHankana: function() {
                 var text = document.getElementById('inputText').value;
                 if (!text.trim()) {
-                    alert('テキストを入力してください');
+                    this.showMessage('leftMessage', '⚠️ テキストを入力してください');
                     return;
                 }
 
@@ -1221,6 +1268,67 @@ URD:OM
                 }, 200);
             },
 
+            highlightKutouten: function() {
+                var text = document.getElementById('inputText').value;
+                if (!text.trim()) {
+                    this.showMessage('leftMessage', '⚠️ テキストを入力してください');
+                    return;
+                }
+
+                var self = this;
+                this.showLoading();
+
+                setTimeout(function() {
+                    var lines = text.split('\n');
+                    var resultLines = [];
+                    var count = 0;
+                    var validEndings = ['。', '！', '？', '!', '?', ':', '：', '〜'];
+
+                    for (var i = 0; i < lines.length; i++) {
+                        var line = lines[i];
+                        var trimmedLine = line.trim();
+                        var isError = false;
+
+                        if (trimmedLine.length > 0) {
+                            var hasValidEnding = false;
+                            for (var k = 0; k < validEndings.length; k++) {
+                                if (trimmedLine.endsWith(validEndings[k])) {
+                                    hasValidEnding = true;
+                                    break;
+                                }
+                            }
+                            if (trimmedLine.startsWith('http:') || trimmedLine.startsWith('https:') || /URD:OM/i.test(trimmedLine)) {
+                                hasValidEnding = true;
+                            }
+
+                            if (!hasValidEnding) {
+                                isError = true;
+                                count++;
+                            }
+                        }
+                        
+                        if (isError) {
+                            resultLines.push('<span class="highlight-kutouten-ng" title="この文には句点がありません">' + self.escapeHtml(line) + '</span>');
+                        } else {
+                            resultLines.push(self.escapeHtml(line));
+                        }
+                    }
+
+                    var result = resultLines.join('<br>');
+                    var message = '';
+                    if (count === 0) {
+                        message = '✅ 全ての文に句点があります';
+                    } else {
+                        message = '🖋️ ' + count + '個の句点がない文をハイライトしました';
+                    }
+
+                    self.switchToResultMode();
+                    self.showMessage('leftMessage', message);
+                    document.getElementById('leftOutputArea').innerHTML = result;
+                    self.hideLoading();
+                }, 200);
+            },
+
             clearResults: function() {
                 document.getElementById('outputArea').value = '';
                 document.getElementById('leftMessage').style.display = 'none';
@@ -1234,24 +1342,20 @@ URD:OM
             reflectResult: function() {
                 var rightText = document.getElementById('outputArea').value;
                 if (!rightText.trim()) {
-                    alert('右側の結果エリアに反映するテキストがありません');
+                    this.showMessage('rightMessage', '⚠️ 右側の結果エリアに反映するテキストがありません');
                     return;
                 }
 
-                // 確認ダイアログ
                 if (confirm('右側の結果を左側の入力エリアに反映しますか？\n（現在の入力内容は上書きされます）')) {
                     document.getElementById('inputText').value = rightText;
                     this.updateStats();
                     
-                    // 編集モードに戻す
                     if (!this.isInputMode) {
                         this.enableEdit();
                     }
                     
-                    // 成功メッセージ
                     this.showMessage('leftMessage', '✅ 右側の結果を左側に反映しました');
                     
-                    // フォーカスを左側に移動
                     document.getElementById('inputText').focus();
                 }
             },
@@ -1280,19 +1384,17 @@ URD:OM
 
             createMonthCalendar: function(year, month, today) {
                 var monthNames = ['1月', '2月', '3月', '4月', '5月', '6月', 
-                                '7月', '8月', '9月', '10月', '11月', '12月'];
+                                  '7月', '8月', '9月', '10月', '11月', '12月'];
                 var weekdays = ['月', '火', '水', '木', '金', '土', '日'];
 
                 var monthDiv = document.createElement('div');
                 monthDiv.className = 'calendar-month';
 
-                // ヘッダー
                 var header = document.createElement('div');
                 header.className = 'calendar-header';
                 header.textContent = year + '年 ' + monthNames[month];
                 monthDiv.appendChild(header);
 
-                // 曜日ヘッダー
                 var weekdaysDiv = document.createElement('div');
                 weekdaysDiv.className = 'calendar-weekdays';
                 for (var w = 0; w < weekdays.length; w++) {
@@ -1303,7 +1405,6 @@ URD:OM
                 }
                 monthDiv.appendChild(weekdaysDiv);
 
-                // 日付
                 var daysDiv = document.createElement('div');
                 daysDiv.className = 'calendar-days';
 
@@ -1311,11 +1412,10 @@ URD:OM
                 var lastDay = new Date(year, month + 1, 0);
                 var startDate = new Date(firstDay);
                 
-                // 月曜始まりに調整（getDay()は日曜=0なので、月曜=0になるよう調整）
                 var dayOfWeek = (firstDay.getDay() + 6) % 7;
                 startDate.setDate(startDate.getDate() - dayOfWeek);
 
-                for (var i = 0; i < 42; i++) { // 6週間分
+                for (var i = 0; i < 42; i++) {
                     var currentDate = new Date(startDate);
                     currentDate.setDate(startDate.getDate() + i);
 
@@ -1323,19 +1423,16 @@ URD:OM
                     dayDiv.className = 'calendar-day';
                     dayDiv.textContent = currentDate.getDate();
 
-                    // 他の月の日付
                     if (currentDate.getMonth() !== month) {
                         dayDiv.classList.add('other-month');
                     }
 
-                    // 今日の日付
                     if (currentDate.toDateString() === today.toDateString()) {
                         dayDiv.classList.add('today');
                     }
 
-                    // 週末（土日）
-                    var dayOfWeekNum = (currentDate.getDay() + 6) % 7; // 月曜=0に調整
-                    if (dayOfWeekNum === 5 || dayOfWeekNum === 6) { // 土曜=5, 日曜=6
+                    var dayOfWeekNum = (currentDate.getDay() + 6) % 7;
+                    if (dayOfWeekNum === 5 || dayOfWeekNum === 6) {
                         dayDiv.classList.add('weekend');
                     }
 
